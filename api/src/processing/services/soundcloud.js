@@ -15,29 +15,53 @@ async function findClientID() {
             return cachedID.id;
         }
 
-        const scripts = sc.matchAll(/<script.+src="(.+)">/g);
+        let clientid = sc.match(/"hydratable"\s*:\s*"apiClient"\s*,\s*"data"\s*:\s*\{\s*"id"\s*:\s*"([^"]+)"/)?.[1];
+        if (!clientid) {
+            const scripts = sc.matchAll(/<script.+src="(.+)">/g);
 
-        let clientid;
-        for (let script of scripts) {
-            const url = script[1];
+            for (let script of scripts) {
+                const url = script[1];
 
-            if (!url?.startsWith('https://a-v2.sndcdn.com/')) {
-                return;
-            }
+                if (!url?.startsWith('https://a-v2.sndcdn.com/')) {
+                    return;
+                }
 
-            const scrf = await fetch(url).then(r => r.text()).catch(() => {});
-            const id = scrf.match(/\("client_id=[A-Za-z0-9]{32}"\)/);
+                const scrf = await fetch(url).then(r => r.text()).catch(() => {});
+                const id = scrf.match(/,client_id:"([A-Za-z0-9]{32})",/);
 
-            if (id && typeof id[0] === 'string') {
-                clientid = id[0].match(/[A-Za-z0-9]{32}/)[0];
-                break;
+                if (id && id.length >= 2) {
+                    clientid = id[1];
+                    break;
+                }
             }
         }
+
         cachedID.version = scVersion;
         cachedID.id = clientid;
 
         return clientid;
     } catch {}
+}
+
+const findBestForPreset = (transcodings, preset) => {
+    let inferior;
+    for (const entry of transcodings) {
+        const protocol = entry?.format?.protocol;
+
+        if (entry.snipped || protocol?.includes('encrypted')) {
+            continue;
+        }
+
+        if (entry?.preset?.startsWith(`${preset}_`)) {
+            if (protocol === 'progressive') {
+                return entry;
+            }
+
+            inferior = entry;
+        }
+    }
+
+    return inferior;
 }
 
 export default async function(obj) {
@@ -89,9 +113,9 @@ export default async function(obj) {
     }
 
     let bestAudio = "opus",
-        selectedStream = json.media.transcodings.find(v => v.preset === "opus_0_0");
+        selectedStream = findBestForPreset(json.media.transcodings, "opus");
 
-    const mp3Media = json.media.transcodings.find(v => v.preset === "mp3_0_0");
+    const mp3Media = findBestForPreset(json.media.transcodings, "mp3");
 
     // use mp3 if present if user prefers it or if opus isn't available
     if (mp3Media && (obj.format === "mp3" || !selectedStream)) {
@@ -108,24 +132,45 @@ export default async function(obj) {
     fileUrl.searchParams.set("track_authorization", json.track_authorization);
 
     const file = await fetch(fileUrl)
-                     .then(async r => (await r.json()).url)
+                     .then(async r => new URL((await r.json()).url))
                      .catch(() => {});
 
     if (!file) return { error: "fetch.empty" };
 
+    const artist = json.user?.username?.trim();
     const fileMetadata = {
-        title: json.title.trim(),
-        artist: json.user.username.trim(),
+        title: json.title?.trim(),
+        album: json.publisher_metadata?.album_title?.trim(),
+        artist,
+        album_artist: artist,
+        composer: json.publisher_metadata?.writer_composer?.trim(),
+        genre: json.genre?.trim(),
+        date: json.display_date?.trim().slice(0, 10),
+        copyright: json.license?.trim(),
+    }
+
+    let cover;
+    if (json.artwork_url) {
+        const coverUrl = json.artwork_url.replace(/-large/, "-t1080x1080");
+        const testCover = await fetch(coverUrl)
+            .then(r => r.status === 200)
+            .catch(() => {});
+
+        if (testCover) {
+            cover = coverUrl;
+        }
     }
 
     return {
-        urls: file,
+        urls: file.toString(),
+        cover,
         filenameAttributes: {
             service: "soundcloud",
             id: json.id,
             ...fileMetadata
         },
         bestAudio,
-        fileMetadata
+        fileMetadata,
+        isHLS: file.pathname.endsWith('.m3u8'),
     }
 }

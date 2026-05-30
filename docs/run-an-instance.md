@@ -4,9 +4,9 @@ this tutorial will help you run your own cobalt processing instance. if your ins
 ## using docker compose and package from github (recommended)
 to run the cobalt docker package, you need to have `docker` and `docker-compose` installed and configured.
 
-if you need help with installing docker, follow *only the first step* of these tutorials by digitalocean:
-- [how to install docker](https://www.digitalocean.com/community/tutorial-collections/how-to-install-and-use-docker)
-- [how to install docker compose](https://www.digitalocean.com/community/tutorial-collections/how-to-install-docker-compose)
+if you need help with installing docker, you can find more information here:
+- [how to install docker](https://docs.docker.com/engine/install/)
+- [how to install docker compose](https://docs.docker.com/compose/install/)
 
 ## how to run a cobalt docker package:
 1. create a folder for cobalt config file, something like this:
@@ -41,7 +41,7 @@ requirements:
 - pnpm
 
 1. clone the repo: `git clone https://github.com/imputnet/cobalt`.
-2. go to api/src directory: `cd cobalt/api/src`.
+2. go to api directory: `cd cobalt/api`.
 3. install dependencies: `pnpm install`.
 4. create `.env` file in the same directory.
 5. add needed environment variables to `.env` file. only `API_URL` is required to run cobalt.
